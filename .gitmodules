@@ -1,6 +1,3 @@
-[submodule "external/noether"]
-	path = external/noether
-	url = https://github.com/ros-industrial/noether.git
-[submodule "PC/external/noether"]
-	path = PC/external/noether
+[submodule "PC/planning/external/noether"]
+	path = PC/planning/external/noether
 	url = https://github.com/ros-industrial/noether.git
