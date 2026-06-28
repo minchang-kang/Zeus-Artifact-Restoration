@@ -1,0 +1,162 @@
+#include <noether_gui/widgets/tpp_pipeline_widget.h>
+#include "ui_tpp_pipeline_widget.h"
+#include <noether_gui/widgets/plugin_loader_widget.h>
+#include <noether_gui/plugin_interface.h>
+#include <noether_gui/utils.h>
+
+#include <noether_tpp/serialization.h>
+#include <noether_tpp/utils.h>
+#include <noether_tpp/core/tool_path_planner_pipeline.h>
+#include <QMenu>
+#include <QMessageBox>
+#include <yaml-cpp/yaml.h>
+
+static const std::string MESH_MODIFIERS_KEY = "mesh_modifiers";
+static const std::string TOOL_PATH_PLANNER_KEY = "tool_path_planner";
+static const std::string TOOL_PATH_MODIFIERS_KEY = "tool_path_modifiers";
+
+namespace noether
+{
+TPPPipelineWidget::TPPPipelineWidget(std::shared_ptr<const WidgetFactory> factory, QWidget* parent)
+  : BaseWidget(parent)
+  , factory_(factory)
+  , ui_(new Ui::TPPPipeline())
+  , mesh_modifier_loader_widget_(new PluginLoaderWidget<MeshModifierWidgetPlugin>(factory, "Mesh Modifier", this))
+  , tool_path_modifier_loader_widget_(
+        new PluginLoaderWidget<ToolPathModifierWidgetPlugin>(factory, "Tool Path Modifier", this))
+{
+  ui_->setupUi(this);
+
+  // Populate the combo boxes
+  QStringList plugin_names = toQStringList(factory_->getAvailablePlugins<ToolPathPlannerWidgetPlugin>());
+  plugin_names.sort();
+  ui_->combo_box_tpp->addItems(plugin_names);
+
+  // Add the TPP plugins
+  for (const QString& plugin_name : plugin_names)
+  {
+    if (plugin_name.isEmpty())
+    {
+      ui_->stacked_widget->addWidget(new QWidget(this));
+    }
+    else
+    {
+      ui_->stacked_widget->addWidget(factory->createToolPathPlannerWidget(plugin_name.toStdString(), {}, this));
+    }
+  }
+
+  // // Change the stacked widget with the combo box
+  connect(ui_->combo_box_tpp,
+          QOverload<int>::of(&QComboBox::currentIndexChanged),
+          ui_->stacked_widget,
+          &QStackedWidget::setCurrentIndex);
+
+  // Add the tool path modifier loader widget
+  {
+    auto layout = new QVBoxLayout();
+    layout->addWidget(tool_path_modifier_loader_widget_);
+    ui_->tab_tool_path_modifier->setLayout(layout);
+  }
+
+  // Add the mesh modifier loader widget
+  {
+    auto layout = new QVBoxLayout();
+    layout->addWidget(mesh_modifier_loader_widget_);
+    ui_->tab_mesh_modifier->setLayout(layout);
+  }
+}
+
+void TPPPipelineWidget::configure(const YAML::Node& config)
+{
+  try
+  {
+    // Mesh modifier
+    mesh_modifier_loader_widget_->configure(config[MESH_MODIFIERS_KEY]);
+
+    // Tool path planner
+    try
+    {
+      auto tpp_config = config[TOOL_PATH_PLANNER_KEY];
+
+      // Prefer to load the GUI plugin from the key "gui_plugin_name" first
+      const std::string name_key = tpp_config["gui_plugin_name"] ? "gui_plugin_name" : "name";
+      auto name = YAML::getMember<std::string>(tpp_config, name_key);
+
+      int index = ui_->combo_box_tpp->findText(QString::fromStdString(name));
+      if (index >= 0)
+      {
+        ui_->combo_box_tpp->setCurrentIndex(index);
+        auto* tpp_widget = dynamic_cast<BaseWidget*>(ui_->stacked_widget->widget(index));
+        if (tpp_widget)
+          tpp_widget->configure(tpp_config);
+      }
+      else
+      {
+        const std::vector<std::string> tpp_plugins = factory_->getAvailablePlugins<ToolPathPlannerWidgetPlugin>();
+        std::stringstream ss;
+        ss << "Failed to find tool path planner '" << name << "'. Available plugins:\n";
+        for (const std::string& tpp_plugin : tpp_plugins)
+          ss << "    - " << tpp_plugin << "\n";
+
+        throw std::runtime_error(ss.str());
+      }
+    }
+    catch (const std::exception&)
+    {
+      ui_->combo_box_tpp->setCurrentIndex(0);
+      std::throw_with_nested(std::runtime_error("Error configuring tool path planner: "));
+    }
+
+    // Tool path modifiers
+    tool_path_modifier_loader_widget_->configure(config[TOOL_PATH_MODIFIERS_KEY]);
+  }
+  catch (const std::exception& ex)
+  {
+    // Clear the widgets
+    ui_->combo_box_tpp->setCurrentIndex(0);
+    mesh_modifier_loader_widget_->removeWidgets();
+    tool_path_modifier_loader_widget_->removeWidgets();
+
+    std::stringstream ss;
+    printException(ex, ss);
+    QMessageBox::warning(this, "Configuration Error", QString::fromStdString(ss.str()));
+  }
+}
+
+void TPPPipelineWidget::save(YAML::Node& config) const
+{
+  // Mesh modifier
+  {
+    YAML::Node mm_config;
+    mesh_modifier_loader_widget_->save(mm_config);
+    config[MESH_MODIFIERS_KEY] = mm_config;
+  }
+
+  // Tool path planner
+  {
+    auto tpp_widget = dynamic_cast<const BaseWidget*>(ui_->stacked_widget->currentWidget());
+    if (!tpp_widget)
+      throw std::runtime_error("No tool path planner selected");
+
+    YAML::Node tpp_config;
+    tpp_config["name"] = ui_->combo_box_tpp->currentText().toStdString();
+    tpp_widget->save(tpp_config);
+    config[TOOL_PATH_PLANNER_KEY] = tpp_config;
+  }
+
+  // Tool path modifiers
+  {
+    YAML::Node tpm_config;
+    tool_path_modifier_loader_widget_->save(tpm_config);
+    config[TOOL_PATH_MODIFIERS_KEY] = tpm_config;
+  }
+}
+
+ToolPathPlannerPipeline TPPPipelineWidget::createPipeline() const
+{
+  YAML::Node config;
+  save(config);
+  return ToolPathPlannerPipeline(*factory_, config);
+}
+
+}  // namespace noether
