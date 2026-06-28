@@ -1,0 +1,3 @@
+[submodule "external/noether"]
+	path = external/noether
+	url = https://github.com/ros-industrial/noether.git
