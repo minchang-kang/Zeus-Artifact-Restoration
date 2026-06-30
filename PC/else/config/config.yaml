@@ -1,0 +1,14 @@
+planning:
+  executable: PC/planning/build/planning
+  pcd: PC/planning/data/sample_fragment.pcd
+  socket: /tmp/planning.sock
+  radius: 0.01
+  spacing: 0.005
+  segment: none
+
+kinematics:
+  urdf: PC/else/urdf/ur3e/urdf/####UR3e_Master_Device.urdf
+  srdf: PC/else/urdf/ur3e/urdf/ur3e.srdf
+  group: manipulator
+  tip_link: L6
+  base_link: base_link

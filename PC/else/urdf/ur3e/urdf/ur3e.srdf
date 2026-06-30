@@ -1,0 +1,47 @@
+<?xml version="1.0"?>
+<robot name="####UR3e_Master_Device">
+  <group name="manipulator">
+    <chain base_link="base_link" tip_link="L6"/>
+  </group>
+
+  <group_state name="home" group="manipulator">
+    <joint name="J1" value="0"/>
+    <joint name="J2" value="0"/>
+    <joint name="J3" value="0"/>
+    <joint name="J4" value="0"/>
+    <joint name="J5" value="0"/>
+    <joint name="J6" value="0"/>
+  </group_state>
+
+  <disable_collisions link1="base_link" link2="L1" reason="Adjacent"/>
+  <disable_collisions link1="L1"        link2="L2" reason="Adjacent"/>
+  <disable_collisions link1="L2"        link2="L3" reason="Adjacent"/>
+  <disable_collisions link1="L3"        link2="L4" reason="Adjacent"/>
+  <disable_collisions link1="L4"        link2="L5" reason="Adjacent"/>
+  <disable_collisions link1="L5"        link2="L6" reason="Adjacent"/>
+
+  <kinematic_plugins>
+search_paths:
+  - /home/k522/workspace/Zeus-Artifact-Restoration/PC/else/.venv/lib/python3.10/site-packages/tesseract_robotics.libs
+search_libraries:
+  - tesseract_kinematics_kdl_factories
+fwd_kin_plugins:
+  manipulator:
+    default: KDLFwdKinChain
+    plugins:
+      KDLFwdKinChain:
+        class: KDLFwdKinChainFactory
+        config:
+          base_link: base_link
+          tip_link: L6
+inv_kin_plugins:
+  manipulator:
+    default: KDLInvKinChainLMA
+    plugins:
+      KDLInvKinChainLMA:
+        class: KDLInvKinChainLMAFactory
+        config:
+          base_link: base_link
+          tip_link: L6
+  </kinematic_plugins>
+</robot>
